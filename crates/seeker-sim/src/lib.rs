@@ -5,7 +5,9 @@
 
 pub mod api;
 pub mod config;
+pub mod domain;
 pub mod telemetry;
+pub mod vision;
 
 pub use config::AppConfig;
 

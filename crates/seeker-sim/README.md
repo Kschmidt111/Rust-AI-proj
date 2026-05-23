@@ -1,9 +1,20 @@
-# seeker-sim crate
+# SeekerSim crate (Phase 1B)
 
-Rust binary and library for SeekerSim. **Not initialized yet** — created in Phase 1 with `cargo new`.
+Minimal HTTP server with `GET /health`.
 
-**Before coding, read:**
+## Run
 
-- [docs/ARCHITECTURE.md](../../docs/ARCHITECTURE.md) — modules and file tree
-- [docs/TOOLS.md](../../docs/TOOLS.md) — dependencies
-- [docs/LEARNING_ROADMAP.md](../../docs/LEARNING_ROADMAP.md) — Phase 1 steps
+```powershell
+cd crates/seeker-sim
+cargo run
+```
+
+In another terminal:
+
+```powershell
+curl http://127.0.0.1:8080/health
+```
+
+Expected: `{"status":"ok","service":"seeker-sim"}`
+
+See [docs/LEARNING_ROADMAP.md](../../docs/LEARNING_ROADMAP.md) for next steps (Phase 1C: config).

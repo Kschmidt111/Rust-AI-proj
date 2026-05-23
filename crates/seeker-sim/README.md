@@ -1,6 +1,19 @@
-# SeekerSim crate (Phase 1B)
+# SeekerSim crate (Phase 1D)
 
-Minimal HTTP server with `GET /health`.
+Library + binary layout; HTTP routes under `src/api/`, config in `src/config.rs`, logging via `tracing`.
+
+## Layout
+
+```
+src/
+├── main.rs           # thin entry
+├── lib.rs            # run(), shared modules
+├── config.rs
+├── telemetry/        # logging init (metrics later)
+└── api/
+    └── routes/
+        └── health.rs
+```
 
 ## Run
 
@@ -9,12 +22,16 @@ cd crates/seeker-sim
 cargo run
 ```
 
-In another terminal:
+Config: `config/default.toml` at repo root (`[server].bind`).
 
 ```powershell
-curl http://127.0.0.1:8080/health
+curl.exe http://127.0.0.1:8080/health
+cargo test
 ```
 
-Expected: `{"status":"ok","service":"seeker-sim"}`
+Debug logs:
 
-See [docs/LEARNING_ROADMAP.md](../../docs/LEARNING_ROADMAP.md) for next steps (Phase 1C: config).
+```powershell
+$env:RUST_LOG = "seeker_sim=debug"
+cargo run
+```

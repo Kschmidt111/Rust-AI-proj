@@ -12,3 +12,22 @@ axum = "0.8"
 # Serialize/deserialize JSON for API responses.
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+# Parse config/default.toml (Phase 1C+).
+toml = "0.8"
+# Structured logging (Phase 1D+).
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+# Typed errors for config loading.
+thiserror = "2"
+
+[dev-dependencies]
+# In-memory HTTP testing for route handlers.
+tower = { version = "0.5", features = ["util"] }
+
+[lib]
+name = "seeker_sim"
+path = "src/lib.rs"
+
+[[bin]]
+name = "seeker-sim"
+path = "src/main.rs"

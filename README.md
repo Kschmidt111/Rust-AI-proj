@@ -102,6 +102,3 @@ Details: [docs/TOOLS.md](docs/TOOLS.md).
 
 ## Quick links
 
-- Architecture & flows → [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
-- Tools & rationale → [docs/TOOLS.md](docs/TOOLS.md)
-- Git sync → [docs/GITHUB_SETUP.md](docs/GITHUB_SETUP.md)

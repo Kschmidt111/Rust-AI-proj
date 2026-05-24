@@ -49,7 +49,7 @@ Run through this **before every push**:
 ### 1. Inspect what will leave your machine
 
 ```powershell
-cd "C:\Users\schm3\OneDrive\Desktop\Rust AI proj"
+cd C:\Projects\Rust-AI-proj   # your local clone
 git status
 git diff
 git diff --cached
@@ -127,7 +127,7 @@ Before suggesting or running `git push`, the assistant must:
 ## Related files
 
 - [.gitignore](.gitignore) — ignored paths
-- [docs/GITHUB_SETUP.md](docs/GITHUB_SETUP.md) — branch workflow
+- [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) — branch workflow (§7)
 - [.cursor/rules/pre-push-security.mdc](.cursor/rules/pre-push-security.mdc) — Cursor agent rule (auto-reminder)
 
 ---

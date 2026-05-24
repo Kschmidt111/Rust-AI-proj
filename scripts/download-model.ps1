@@ -14,4 +14,4 @@ Write-Host "Downloading YOLOv8n ONNX to $outFile ..."
 Invoke-WebRequest -Uri $url -OutFile $outFile -UseBasicParsing
 
 Write-Host "Done. Size: $((Get-Item $outFile).Length) bytes"
-Write-Host "License: Ultralytics YOLO is AGPL-3.0 - see docs/PROJECT_BRIEF.md"
+Write-Host "License: Ultralytics YOLO is AGPL-3.0 (https://www.ultralytics.com/license)"

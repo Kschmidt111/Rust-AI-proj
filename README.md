@@ -2,7 +2,7 @@
 
 **Visual tracking and closed-loop guidance simulation in Rust.**
 
-SeekerSim ingests video (or frame sequences), uses AI to **detect and track** a fast-moving target, estimates its motion with a filter, and runs a **proportional navigation (PN)** guidance law in software—producing steering commands as if a seeker were processing imagery mid-flight. Everything runs **locally** on your machine
+SeekerSim ingests video (or frame sequences), uses AI to **detect and track** a fast-moving target, estimates its motion with a filter, and runs a **proportional navigation (PN)** guidance law in software—producing steering commands as if a seeker were processing imagery mid-flight. Everything runs **locally** on your machine.
 
 > **Status:** Phase 0 — documentation and architecture. Application code starts in Phase 1.
 
@@ -95,4 +95,10 @@ Full module breakdown: [docs/ARCHITECTURE.md#repository--file-structure](docs/AR
 
 Details: [docs/TOOLS.md](docs/TOOLS.md).
 
+---
+
+
+---
+
+## Quick links
 

@@ -1,10 +1,12 @@
 //! Logging bootstrap and run telemetry export (CSV).
 
+pub mod plot;
 pub mod record;
 pub mod writer;
 
-pub use record::TrackRecord;
-pub use writer::{new_run_id, write_tracks_csv, TelemetryError, TracksCsvWriter};
+pub use plot::write_trajectory_png;
+pub use record::{GuidanceRecord, SimRecord, TrackRecord};
+pub use writer::{new_run_id, write_intercept_csvs, write_tracks_csv, InterceptCsvPaths, TelemetryError, TracksCsvWriter};
 
 use tracing_subscriber::{EnvFilter, fmt, prelude::*};
 

@@ -1,12 +1,31 @@
 //! Write per-run CSV artifacts under `data/output/{run_id}/`.
 
 use crate::domain::TrackState;
-use crate::telemetry::record::TrackRecord;
+use crate::telemetry::record::{GuidanceRecord, SimRecord, TrackRecord};
 use std::fs::{self, File};
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 use thiserror::Error;
+
+/// Plain plot failure message as a proper [`std::error::Error`] for `thiserror` chaining.
+#[derive(Debug)]
+pub struct PlotRenderError(String);
+
+impl PlotRenderError {
+    /// Wraps a human-readable plotters failure message.
+    pub fn new(message: impl Into<String>) -> Self {
+        Self(message.into())
+    }
+}
+
+impl std::fmt::Display for PlotRenderError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+impl std::error::Error for PlotRenderError {}
 
 /// Errors while creating run output directories or writing CSV files.
 #[derive(Debug, Error)]
@@ -21,6 +40,16 @@ pub enum TelemetryError {
     Write {
         path: PathBuf,
         source: io::Error,
+    },
+
+    #[error("cannot plot empty sim data")]
+    EmptyPlotData,
+
+    #[error("failed to render plot '{path}'")]
+    Plot {
+        path: PathBuf,
+        #[source]
+        source: PlotRenderError,
     },
 }
 
@@ -125,10 +154,96 @@ pub fn write_tracks_csv(
     Ok((path, states.len()))
 }
 
+/// Paths to all intercept run CSV artifacts.
+#[derive(Debug, Clone)]
+pub struct InterceptCsvPaths {
+    pub tracks_csv: PathBuf,
+    pub guidance_csv: PathBuf,
+    pub sim_csv: PathBuf,
+    pub trajectory_png: PathBuf,
+    pub track_rows: usize,
+    pub guidance_rows: usize,
+    pub sim_rows: usize,
+}
+
+/// Writes `tracks.csv`, `guidance.csv`, and `sim.csv` under `{output_root}/{run_id}/`.
+pub fn write_intercept_csvs(
+    output_root: &Path,
+    run_id: &str,
+    tracks: &[TrackState],
+    guidance: &[GuidanceRecord],
+    sim: &[SimRecord],
+) -> Result<InterceptCsvPaths, TelemetryError> {
+    let (tracks_csv, track_rows) = write_tracks_csv(output_root, run_id, tracks)?;
+
+    let run_dir = output_root.join(run_id);
+    let guidance_csv = write_guidance_csv(&run_dir, guidance)?;
+    let sim_csv = write_sim_csv(&run_dir, sim)?;
+    let trajectory_png = run_dir.join("trajectory.png");
+    crate::telemetry::plot::write_trajectory_png(&trajectory_png, sim, guidance)?;
+
+    Ok(InterceptCsvPaths {
+        tracks_csv,
+        guidance_csv,
+        sim_csv,
+        trajectory_png,
+        track_rows,
+        guidance_rows: guidance.len(),
+        sim_rows: sim.len(),
+    })
+}
+
+fn write_guidance_csv(run_dir: &Path, rows: &[GuidanceRecord]) -> Result<PathBuf, TelemetryError> {
+    let path = run_dir.join("guidance.csv");
+    let mut file = File::create(&path).map_err(|source| TelemetryError::Write {
+        path: path.clone(),
+        source,
+    })?;
+    writeln!(file, "{}", GuidanceRecord::csv_header()).map_err(|source| TelemetryError::Write {
+        path: path.clone(),
+        source,
+    })?;
+    for row in rows {
+        writeln!(file, "{}", row.to_csv_row()).map_err(|source| TelemetryError::Write {
+            path: path.clone(),
+            source,
+        })?;
+    }
+    file.flush().map_err(|source| TelemetryError::Write {
+        path: path.clone(),
+        source,
+    })?;
+    Ok(path)
+}
+
+fn write_sim_csv(run_dir: &Path, rows: &[SimRecord]) -> Result<PathBuf, TelemetryError> {
+    let path = run_dir.join("sim.csv");
+    let mut file = File::create(&path).map_err(|source| TelemetryError::Write {
+        path: path.clone(),
+        source,
+    })?;
+    writeln!(file, "{}", SimRecord::csv_header()).map_err(|source| TelemetryError::Write {
+        path: path.clone(),
+        source,
+    })?;
+    for row in rows {
+        writeln!(file, "{}", row.to_csv_row()).map_err(|source| TelemetryError::Write {
+            path: path.clone(),
+            source,
+        })?;
+    }
+    file.flush().map_err(|source| TelemetryError::Write {
+        path: path.clone(),
+        source,
+    })?;
+    Ok(path)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::domain::TrackState;
+    use crate::telemetry::record::{GuidanceRecord, SimRecord};
     use std::time::{SystemTime, UNIX_EPOCH};
 
     fn temp_output() -> PathBuf {
@@ -168,6 +283,52 @@ mod tests {
         assert_eq!(lines[0], TrackRecord::csv_header());
         assert!(lines[1].starts_with("1,1,"));
         assert!(lines[2].starts_with("2,1,"));
+
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn writes_intercept_csv_bundle() {
+        let root = temp_output();
+        let run_id = "intercept_run";
+
+        let guidance = vec![GuidanceRecord {
+            frame_index: 1,
+            track_id: 1,
+            los: 0.05,
+            los_rate: -0.01,
+            law: "pn".into(),
+            commanded_lateral_accel: 3.0,
+        }];
+        let sim = vec![SimRecord {
+            frame_index: 1,
+            time_s: 0.033,
+            interceptor_x: 0.0,
+            interceptor_y: 0.0,
+            target_x: 100.0,
+            target_y: 10.0,
+            interceptor_vx: 150.0,
+            interceptor_vy: 0.0,
+            miss_distance: 100.5,
+        }];
+
+        let paths = write_intercept_csvs(
+            &root,
+            run_id,
+            &[sample_state(1)],
+            &guidance,
+            &sim,
+        )
+        .expect("write intercept");
+
+        assert_eq!(paths.track_rows, 1);
+        assert_eq!(paths.guidance_rows, 1);
+        assert_eq!(paths.sim_rows, 1);
+        assert!(paths.tracks_csv.exists());
+        assert!(paths.guidance_csv.exists());
+        assert!(paths.sim_csv.exists());
+        assert!(paths.trajectory_png.exists());
+        assert!(fs::metadata(&paths.trajectory_png).unwrap().len() > 500);
 
         let _ = fs::remove_dir_all(&root);
     }

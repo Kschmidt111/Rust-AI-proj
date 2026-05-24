@@ -1,16 +1,22 @@
-//! Phase 3+ — orchestrates ingest → vision → tracking over a frame sequence.
+//! Phase 3+ — orchestrates ingest → vision → tracking → guidance → sim.
 //!
 //! `process_frame_folder` runs YOLO (Phase 3). `track_motion_folder` wires motion
-//! centroids + Kalman tracking (Phase 4F).
+//! centroids + Kalman tracking (Phase 4F). `intercept_motion_folder` adds PN + sim (Phase 5C).
 
 use crate::config::AppConfig;
 use crate::domain::{TrackState, VisionError};
+use crate::guidance::{proportional_navigation, pure_pursuit};
 use crate::ingest::{FrameSource, IngestError};
-use crate::telemetry::{new_run_id, write_tracks_csv, TelemetryError};
+use crate::sim::{map_image_to_sim, SimEngine};
+use crate::telemetry::{
+    new_run_id, write_intercept_csvs, write_tracks_csv, GuidanceRecord, InterceptCsvPaths,
+    SimRecord, TelemetryError,
+};
 use crate::tracking::{
     associate_nearest_point, LosEstimator, PointAssociation, PointTracker, RoiMotionTracker,
 };
 use crate::vision::{decode, YoloDetector};
+use crate::vision::decode::RgbImageData;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 use thiserror::Error;
@@ -80,6 +86,129 @@ pub struct MotionTrackSummary {
     /// Number of rows in `tracks.csv` (excluding header).
     pub track_row_count: usize,
     pub frames: Vec<TrackFrameStats>,
+}
+
+/// Per-frame output when running track + guidance + sim.
+#[derive(Debug, Clone)]
+pub struct InterceptFrameStats {
+    pub index: usize,
+    pub path: PathBuf,
+    pub centroid: Option<(f32, f32)>,
+    pub track: Option<TrackState>,
+    /// PN lateral command when sim was active.
+    pub commanded_lateral_accel: Option<f32>,
+    /// Sim miss distance after this frame's step.
+    pub miss_distance: Option<f32>,
+    pub elapsed_ms: f64,
+}
+
+/// Summary after motion track + PN guidance + 2D sim over a frame folder.
+#[derive(Debug, Clone)]
+pub struct InterceptSummary {
+    pub folder: PathBuf,
+    pub frame_count: usize,
+    pub track_id: Option<u64>,
+    pub run_id: String,
+    pub tracks_csv: PathBuf,
+    pub guidance_csv: PathBuf,
+    pub sim_csv: PathBuf,
+    pub trajectory_png: PathBuf,
+    pub track_row_count: usize,
+    pub guidance_row_count: usize,
+    pub sim_row_count: usize,
+    /// Smallest miss distance observed during the run.
+    pub min_miss_distance: Option<f32>,
+    pub frames: Vec<InterceptFrameStats>,
+}
+
+/// Mutable state for motion + Kalman tracking over a frame sequence.
+struct MotionTrackSession {
+    motion: RoiMotionTracker,
+    los_estimator: LosEstimator,
+    tracker: Option<PointTracker>,
+    active_track_id: Option<u64>,
+}
+
+impl MotionTrackSession {
+    fn new(motion_threshold: f32) -> Self {
+        Self {
+            motion: RoiMotionTracker::with_settings(motion_threshold, 4),
+            los_estimator: LosEstimator::new(),
+            tracker: None,
+            active_track_id: None,
+        }
+    }
+
+    fn track_id(&self) -> Option<u64> {
+        self.active_track_id
+    }
+
+    /// Processes one RGB frame; returns centroid and optional track state.
+    fn process_frame(
+        &mut self,
+        index: usize,
+        rgb: &RgbImageData,
+        dt: f32,
+        gate: f32,
+        max_coast: u32,
+        roi_half: u32,
+    ) -> (Option<(f32, f32)>, Option<TrackState>) {
+        if let Some(trk) = self.tracker.as_mut() {
+            trk.begin_frame(dt);
+        }
+
+        let centroid = if self.tracker.is_some() {
+            let predicted = self.tracker.as_ref().expect("tracker").position();
+            self.motion
+                .detect_roi(rgb, predicted.0, predicted.1, roi_half)
+        } else {
+            self.motion.detect_global(rgb)
+        };
+
+        let track = match (&mut self.tracker, centroid) {
+            (Some(trk), centroid_opt) => {
+                let predicted = trk.position();
+                let measurement = centroid_opt.and_then(|c| {
+                    match associate_nearest_point(predicted, &[c], gate) {
+                        PointAssociation::Matched(_) => Some(c),
+                        PointAssociation::NoMatch => None,
+                    }
+                });
+                let state = trk.finish_frame(index as u64, measurement);
+                Some(apply_los(
+                    state,
+                    &mut self.los_estimator,
+                    rgb.width,
+                    rgb.height,
+                    dt,
+                ))
+            }
+            (None, Some(c)) => {
+                let mut trk = PointTracker::with_coast_limit(1, c.0, c.1, max_coast);
+                self.los_estimator.reset();
+                let state = trk.finish_frame(index as u64, Some(c));
+                self.active_track_id = Some(trk.track_id());
+                self.tracker = Some(trk);
+                Some(apply_los(
+                    state,
+                    &mut self.los_estimator,
+                    rgb.width,
+                    rgb.height,
+                    dt,
+                ))
+            }
+            (None, None) => None,
+        };
+
+        if self.tracker.as_ref().is_some_and(|t| t.is_lost()) {
+            tracing::info!(frame_index = index, "track lost — ready to re-acquire");
+            self.tracker = None;
+            self.active_track_id = None;
+            self.los_estimator.reset();
+        }
+
+        (centroid, track)
+    }
 }
 
 /// Processes every PNG/JPEG in a folder through YOLO detection.
@@ -168,86 +297,24 @@ pub fn track_motion_folder(
     let gate = config.tracking.point_match_distance_px;
     let max_coast = config.tracking.max_coast_frames;
     let roi_half = config.tracking.roi_half_size_px;
-    let motion_threshold = config.tracking.motion_threshold;
 
-    let mut motion = RoiMotionTracker::with_settings(motion_threshold, 4);
-    let mut los_estimator = LosEstimator::new();
-    let mut tracker: Option<PointTracker> = None;
-    let mut active_track_id: Option<u64> = None;
+    let mut session = MotionTrackSession::new(config.tracking.motion_threshold);
     let mut frames = Vec::with_capacity(paths.len());
 
     for (index, path) in paths.iter().enumerate() {
         let start = Instant::now();
         let rgb = decode::load_rgb_image(path)?;
-
-        // Predict early when tracking so ROI is centered on the Kalman prediction.
-        if let Some(trk) = tracker.as_mut() {
-            trk.begin_frame(dt);
-        }
-
-        let centroid = if tracker.is_some() {
-            let predicted = tracker.as_ref().expect("tracker").position();
-            motion.detect_roi(&rgb, predicted.0, predicted.1, roi_half)
-        } else {
-            motion.detect_global(&rgb)
-        };
-
-        let track = match (&mut tracker, centroid) {
-            (Some(trk), centroid_opt) => {
-                let predicted = trk.position();
-                let measurement = centroid_opt.and_then(|c| {
-                    match associate_nearest_point(predicted, &[c], gate) {
-                        PointAssociation::Matched(_) => Some(c),
-                        PointAssociation::NoMatch => None,
-                    }
-                });
-                let state = trk.finish_frame(index as u64, measurement);
-                Some(apply_los(state, &mut los_estimator, rgb.width, rgb.height, dt))
-            }
-            (None, Some(c)) => {
-                let mut trk = PointTracker::with_coast_limit(1, c.0, c.1, max_coast);
-                los_estimator.reset();
-                let state = trk.finish_frame(index as u64, Some(c));
-                active_track_id = Some(trk.track_id());
-                tracker = Some(trk);
-                Some(apply_los(state, &mut los_estimator, rgb.width, rgb.height, dt))
-            }
-            (None, None) => None,
-        };
-
-        if tracker.as_ref().is_some_and(|t| t.is_lost()) {
-            tracing::info!(frame_index = index, "track lost — ready to re-acquire");
-            tracker = None;
-            active_track_id = None;
-            los_estimator.reset();
-        }
+        let (centroid, track) = session.process_frame(
+            index,
+            &rgb,
+            dt,
+            gate,
+            max_coast,
+            roi_half,
+        );
 
         let elapsed_ms = start.elapsed().as_secs_f64() * 1000.0;
-
-        if let Some(ref state) = track {
-            tracing::info!(
-                frame_index = index,
-                path = %path.display(),
-                track_id = state.track_id,
-                pos_x = format!("{:.1}", state.position.0),
-                pos_y = format!("{:.1}", state.position.1),
-                vel_x = format!("{:.1}", state.velocity.0),
-                vel_y = format!("{:.1}", state.velocity.1),
-                los = format!("{:.4}", state.los),
-                los_rate = format!("{:.4}", state.los_rate),
-                coast = state.coast_count,
-                elapsed_ms = format!("{elapsed_ms:.1}"),
-                "track frame"
-            );
-        } else {
-            tracing::info!(
-                frame_index = index,
-                path = %path.display(),
-                has_centroid = centroid.is_some(),
-                elapsed_ms = format!("{elapsed_ms:.1}"),
-                "track frame (no active track)"
-            );
-        }
+        log_track_frame(index, path, centroid, track.as_ref(), elapsed_ms);
 
         frames.push(TrackFrameStats {
             index,
@@ -261,7 +328,7 @@ pub fn track_motion_folder(
     tracing::info!(
         folder = %folder.display(),
         frame_count = frames.len(),
-        track_id = ?active_track_id,
+        track_id = ?session.track_id(),
         tracked_frames = frames.iter().filter(|f| f.track.is_some()).count(),
         "motion track run complete"
     );
@@ -285,12 +352,267 @@ pub fn track_motion_folder(
     Ok(MotionTrackSummary {
         folder: folder.to_path_buf(),
         frame_count: frames.len(),
-        track_id: active_track_id,
+        track_id: session.track_id(),
         run_id,
         tracks_csv,
         track_row_count,
         frames,
     })
+}
+
+/// Motion track + proportional navigation + 2D sim over a frame folder.
+///
+/// # Pipeline (per frame, when track is active)
+/// 1. Same motion + Kalman path as [`track_motion_folder`]  
+/// 2. Map track position to sim plane; sync target on [`SimEngine`]  
+/// 3. `a_cmd = N * V_c * los_rate` from vision track  
+/// 4. [`SimEngine::step_seeker_only`] — seeker integrates, target follows video track  
+/// 5. Append rows to `tracks.csv`, `guidance.csv`, `sim.csv`
+pub fn intercept_motion_folder(
+    config: &AppConfig,
+    folder: &Path,
+) -> Result<InterceptSummary, PipelineError> {
+    let paths = FrameSource::folder(folder).collect_paths()?;
+    let dt = config.sim.dt_seconds;
+    let gate = config.tracking.point_match_distance_px;
+    let max_coast = config.tracking.max_coast_frames;
+    let roi_half = config.tracking.roi_half_size_px;
+    let law = config.guidance.law.clone();
+
+    let mut session = MotionTrackSession::new(config.tracking.motion_threshold);
+    let mut sim: Option<SimEngine> = None;
+    let mut frames = Vec::with_capacity(paths.len());
+    let mut guidance_records = Vec::new();
+    let mut sim_records = Vec::new();
+    let mut min_miss: Option<f32> = None;
+
+    for (index, path) in paths.iter().enumerate() {
+        let start = Instant::now();
+        let rgb = decode::load_rgb_image(path)?;
+        let (centroid, track) = session.process_frame(
+            index,
+            &rgb,
+            dt,
+            gate,
+            max_coast,
+            roi_half,
+        );
+
+        let mut commanded_lateral_accel = None;
+        let mut frame_miss = None;
+
+        if let Some(ref state) = track {
+            if sim.is_none() {
+                sim = Some(init_sim_from_track(config, state, rgb.width, rgb.height));
+            }
+
+            if let Some(engine) = sim.as_mut() {
+                let (target_pos, target_vel) = map_image_to_sim(
+                    state.position,
+                    state.velocity,
+                    rgb.width,
+                    rgb.height,
+                );
+                engine.sync_target(target_pos, target_vel);
+
+                let a_cmd = guidance_accel(config, state);
+                engine.step_seeker_only(dt, a_cmd);
+
+                commanded_lateral_accel = Some(a_cmd);
+                let miss = engine.miss_distance();
+                frame_miss = Some(miss);
+                min_miss = Some(min_miss.map_or(miss, |m| m.min(miss)));
+
+                guidance_records.push(GuidanceRecord {
+                    frame_index: state.frame_index,
+                    track_id: state.track_id,
+                    los: state.los,
+                    los_rate: state.los_rate,
+                    law: law.clone(),
+                    commanded_lateral_accel: a_cmd,
+                });
+                sim_records.push(SimRecord::from_snapshot(
+                    state.frame_index,
+                    &engine.snapshot(),
+                ));
+            }
+        } else {
+            sim = None;
+        }
+
+        let elapsed_ms = start.elapsed().as_secs_f64() * 1000.0;
+        log_intercept_frame(
+            index,
+            path,
+            centroid,
+            track.as_ref(),
+            commanded_lateral_accel,
+            frame_miss,
+            elapsed_ms,
+        );
+
+        frames.push(InterceptFrameStats {
+            index,
+            path: path.clone(),
+            centroid,
+            track,
+            commanded_lateral_accel,
+            miss_distance: frame_miss,
+            elapsed_ms,
+        });
+    }
+
+    tracing::info!(
+        folder = %folder.display(),
+        frame_count = frames.len(),
+        track_id = ?session.track_id(),
+        min_miss_distance = ?min_miss,
+        "intercept run complete"
+    );
+
+    let run_id = new_run_id();
+    let output_root = config.paths.resolve_output_dir();
+    let track_states: Vec<TrackState> = frames
+        .iter()
+        .filter_map(|f| f.track.clone())
+        .collect();
+    let InterceptCsvPaths {
+        tracks_csv,
+        guidance_csv,
+        sim_csv,
+        trajectory_png,
+        track_rows,
+        guidance_rows,
+        sim_rows,
+    } = write_intercept_csvs(
+        &output_root,
+        &run_id,
+        &track_states,
+        &guidance_records,
+        &sim_records,
+    )?;
+
+    tracing::info!(
+        run_id = %run_id,
+        tracks = %tracks_csv.display(),
+        guidance = %guidance_csv.display(),
+        sim = %sim_csv.display(),
+        plot = %trajectory_png.display(),
+        track_rows,
+        guidance_rows,
+        sim_rows,
+        "intercept CSVs written"
+    );
+
+    Ok(InterceptSummary {
+        folder: folder.to_path_buf(),
+        frame_count: frames.len(),
+        track_id: session.track_id(),
+        run_id,
+        tracks_csv,
+        guidance_csv,
+        sim_csv,
+        trajectory_png,
+        track_row_count: track_rows,
+        guidance_row_count: guidance_rows,
+        sim_row_count: sim_rows,
+        min_miss_distance: min_miss,
+        frames,
+    })
+}
+
+fn init_sim_from_track(
+    config: &AppConfig,
+    track: &TrackState,
+    image_width: u32,
+    image_height: u32,
+) -> SimEngine {
+    let (target_pos, target_vel) =
+        map_image_to_sim(track.position, track.velocity, image_width, image_height);
+    SimEngine::chase_target(
+        config.sim.initial_miss_distance,
+        config.guidance.closing_velocity,
+        target_pos,
+        target_vel,
+    )
+}
+
+fn guidance_accel(config: &AppConfig, track: &TrackState) -> f32 {
+    let n = config.guidance.navigation_constant;
+    let v_c = config.guidance.closing_velocity;
+
+    if config.guidance.is_pn() {
+        proportional_navigation(n, v_c, track.los_rate)
+    } else if config.guidance.is_pp() {
+        pure_pursuit(n, v_c, track.los)
+    } else {
+        tracing::warn!(law = %config.guidance.law, "unknown guidance law — zero lateral accel");
+        0.0
+    }
+}
+
+fn log_track_frame(
+    index: usize,
+    path: &Path,
+    centroid: Option<(f32, f32)>,
+    track: Option<&TrackState>,
+    elapsed_ms: f64,
+) {
+    if let Some(state) = track {
+        tracing::info!(
+            frame_index = index,
+            path = %path.display(),
+            track_id = state.track_id,
+            pos_x = format!("{:.1}", state.position.0),
+            pos_y = format!("{:.1}", state.position.1),
+            vel_x = format!("{:.1}", state.velocity.0),
+            vel_y = format!("{:.1}", state.velocity.1),
+            los = format!("{:.4}", state.los),
+            los_rate = format!("{:.4}", state.los_rate),
+            coast = state.coast_count,
+            elapsed_ms = format!("{elapsed_ms:.1}"),
+            "track frame"
+        );
+    } else {
+        tracing::info!(
+            frame_index = index,
+            path = %path.display(),
+            has_centroid = centroid.is_some(),
+            elapsed_ms = format!("{elapsed_ms:.1}"),
+            "track frame (no active track)"
+        );
+    }
+}
+
+fn log_intercept_frame(
+    index: usize,
+    path: &Path,
+    centroid: Option<(f32, f32)>,
+    track: Option<&TrackState>,
+    a_cmd: Option<f32>,
+    miss: Option<f32>,
+    elapsed_ms: f64,
+) {
+    if let Some(state) = track {
+        tracing::info!(
+            frame_index = index,
+            path = %path.display(),
+            track_id = state.track_id,
+            los_rate = format!("{:.4}", state.los_rate),
+            a_cmd = format!("{:.2}", a_cmd.unwrap_or(0.0)),
+            miss = format!("{:.1}", miss.unwrap_or(f32::NAN)),
+            elapsed_ms = format!("{elapsed_ms:.1}"),
+            "intercept frame"
+        );
+    } else {
+        tracing::info!(
+            frame_index = index,
+            path = %path.display(),
+            has_centroid = centroid.is_some(),
+            elapsed_ms = format!("{elapsed_ms:.1}"),
+            "intercept frame (no active track)"
+        );
+    }
 }
 
 fn apply_los(
@@ -399,6 +721,46 @@ mod tests {
         assert!(last.velocity.0 > 50.0, "vx={}", last.velocity.0);
         assert!(last.velocity.1 > 20.0, "vy={}", last.velocity.1);
         assert!(last.los_rate.abs() > 0.01, "los_rate={}", last.los_rate);
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn intercept_motion_folder_writes_guidance_and_sim_csv() {
+        let dir = temp_dir("intercept");
+        write_dot_sequence(&dir, 20);
+        let config = AppConfig::load().expect("config");
+
+        let summary = intercept_motion_folder(&config, &dir).expect("intercept run");
+
+        assert_eq!(summary.frame_count, 20);
+        assert!(summary.tracks_csv.exists());
+        assert!(summary.guidance_csv.exists());
+        assert!(summary.sim_csv.exists());
+        assert!(summary.trajectory_png.exists());
+        assert!(fs::metadata(&summary.trajectory_png).unwrap().len() > 500);
+        assert_eq!(summary.track_row_count, summary.guidance_row_count);
+        assert_eq!(summary.track_row_count, summary.sim_row_count);
+        assert!(
+            summary.track_row_count >= 15,
+            "expected many tracked frames, got {}",
+            summary.track_row_count
+        );
+
+        let guidance_text = fs::read_to_string(&summary.guidance_csv).expect("guidance csv");
+        assert!(guidance_text.contains("commanded_lateral_accel"));
+        assert!(guidance_text.contains(",pn,"));
+
+        let sim_text = fs::read_to_string(&summary.sim_csv).expect("sim csv");
+        assert!(sim_text.contains("miss_distance"));
+
+        assert!(
+            summary.frames.iter().any(|f| {
+                f.commanded_lateral_accel
+                    .is_some_and(|a| a.abs() > 0.0)
+            }),
+            "expected non-zero PN commands during track"
+        );
 
         let _ = fs::remove_dir_all(&dir);
     }

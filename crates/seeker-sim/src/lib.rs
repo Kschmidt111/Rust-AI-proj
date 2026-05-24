@@ -6,8 +6,10 @@
 pub mod api;
 pub mod config;
 pub mod domain;
+pub mod guidance;
 pub mod ingest;
 pub mod pipeline;
+pub mod sim;
 pub mod telemetry;
 pub mod tracking;
 pub mod vision;

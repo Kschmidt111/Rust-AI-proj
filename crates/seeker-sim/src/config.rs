@@ -17,6 +17,8 @@ use thiserror::Error;
 pub struct AppConfig {
     /// HTTP server settings (`[server]` in TOML).
     pub server: ServerConfig,
+    /// Vision / ONNX settings (`[vision]` in TOML).
+    pub vision: VisionConfig,
 }
 
 /// `[server]` section — where the Axum listener binds.
@@ -33,6 +35,34 @@ impl ServerConfig {
     /// `IPEndPoint.Parse(configuration["server:bind"])`.
     pub fn socket_addr(&self) -> Result<SocketAddr, AddrParseError> {
         self.bind.parse()
+    }
+}
+
+/// `[vision]` section — YOLO ONNX detector settings (Phase 2+).
+#[derive(Debug, Clone, Deserialize)]
+pub struct VisionConfig {
+    /// Path to `.onnx` file (relative to repo root or absolute).
+    pub model_path: String,
+    /// Square input size (YOLOv8 default 640).
+    pub input_size: u32,
+    /// Drop detections below this score.
+    pub confidence_threshold: f32,
+    /// IoU threshold for non-maximum suppression.
+    pub iou_threshold: f32,
+    /// If non-empty, filter to this COCO class name only.
+    pub target_class: String,
+}
+
+impl VisionConfig {
+    /// Resolves `model_path` relative to repo root when not absolute.
+    pub fn resolve_model_path(&self) -> PathBuf {
+        let path = PathBuf::from(&self.model_path);
+        if path.is_absolute() {
+            return path;
+        }
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../..")
+            .join(path)
     }
 }
 
@@ -103,6 +133,7 @@ mod tests {
         let path = default_config_path();
         let config = AppConfig::load_from_path(&path).expect("default config should parse");
         assert_eq!(config.server.bind, "127.0.0.1:8080");
+        assert_eq!(config.vision.input_size, 640);
         assert!(config.server.socket_addr().is_ok());
     }
 }

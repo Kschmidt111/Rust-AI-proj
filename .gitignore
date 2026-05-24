@@ -23,6 +23,16 @@ target
 # --- SeekerSim ---
 .env
 .env.*
+*.pem
+*.pfx
+*.key
+id_rsa
+id_rsa.*
+secrets.toml
+credentials.json
+**/secrets/
+**/.env.local
+
 models/*
 !models/README.md
 *.onnx

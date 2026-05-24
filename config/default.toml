@@ -1,0 +1,37 @@
+# SeekerSim default configuration
+# Copy or override paths for your machine.
+
+[server]
+bind = "127.0.0.1:8080"
+
+[vision]
+model_path = "models/yolov8n.onnx"
+input_size = 640
+confidence_threshold = 0.5
+iou_threshold = 0.45
+# Empty string = use highest-confidence detection in frame
+target_class = ""
+# Phase 4+: "yolo" | "motion" | "hybrid" (see ADR-017 in docs/DECISIONS.md)
+# perception_mode = "hybrid"
+# roi_half_size_px = 32
+# motion_threshold = 0.02
+
+[tracking]
+iou_match_threshold = 0.3
+max_coast_frames = 15
+point_match_distance_px = 50.0
+roi_half_size_px = 32
+motion_threshold = 0.02
+
+[guidance]
+# "pp" = pure pursuit, "pn" = proportional navigation
+law = "pn"
+navigation_constant = 3.0
+closing_velocity = 100.0
+
+[sim]
+dt_seconds = 0.033
+initial_miss_distance = 500.0
+
+[paths]
+output_dir = "data/output"

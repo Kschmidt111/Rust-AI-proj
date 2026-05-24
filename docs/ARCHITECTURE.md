@@ -188,15 +188,23 @@ flowchart TB
 | Component | Responsibility |
 |-----------|----------------|
 | **preprocess** | Resize, letterbox, normalize to model input tensor |
-| **detector** | ONNX session lifecycle; run inference |
+| **detector** | ONNX session lifecycle; run inference (acquisition / large objects) |
 | **postprocess** | Parse YOLO output; NMS; produce `Detection` list |
+| **motion** | Frame differencing; centroid of moving blob (small-target acquisition) |
+| **roi_tracker** | Search local window around Kalman prediction; update point measurement |
+
+**Perception modes** ([ADR-017](DECISIONS.md#adr-017-hybrid-perception-for-small-moving-targets)):
+
+- `yolo` — Phase 2 single-image / large objects only.
+- `motion` — synthetic or high-contrast small movers.
+- `hybrid` — motion or YOLO to acquire; ROI + Kalman every frame (default for video intercept demo).
 
 ### 4.4 Tracking & estimation
 
 | Component | Responsibility |
 |-----------|----------------|
-| **associator** | Match detection to existing track (IoU threshold) |
-| **kalman** | Constant-velocity filter on bbox center |
+| **associator** | Match detection or centroid to existing track (IoU or distance gate) |
+| **kalman** | Constant-velocity filter on target center (pixels) |
 | **los** | Bearing from seeker reference (image center) and LOS rate |
 
 ### 4.5 Guidance & simulation

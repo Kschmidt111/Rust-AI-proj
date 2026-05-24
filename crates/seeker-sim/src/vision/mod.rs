@@ -33,6 +33,7 @@
 
 pub mod decode;
 mod detector;
+pub mod motion;
 mod postprocess;
 mod preprocess;
 
@@ -41,6 +42,7 @@ use crate::domain::{Detection, VisionError};
 use std::path::Path;
 
 pub use detector::YoloDetector;
+pub use motion::{MotionDetector, motion_centroid};
 
 /// Runs the full detect pipeline on one image file.
 ///

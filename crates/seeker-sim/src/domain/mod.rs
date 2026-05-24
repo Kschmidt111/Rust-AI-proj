@@ -5,4 +5,4 @@ pub mod error;
 pub mod types;
 
 pub use error::VisionError;
-pub use types::{BBox, Detection};
+pub use types::{BBox, Detection, TrackState};

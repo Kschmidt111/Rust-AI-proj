@@ -1,0 +1,24 @@
+---
+description: Pre-push security — never commit secrets, tokens, or personal data
+alwaysApply: true
+---
+
+# Pre-push security (SeekerSim)
+
+Before any `git add`, `git commit`, or `git push`, read [rules.md](../../rules.md) and enforce it.
+
+## Required before push
+
+1. Run `git status` and `git diff` / `git diff --cached`.
+2. Scan for secrets: `ghp_`, `github_pat_`, `sk-`, `AKIA`, `api_key`, `password=`, `token=`, `.env`, `*.pem`, `*.key`.
+3. Ensure `.env`, `data/` (except README), `models/*.onnx`, and `target/` are not staged.
+4. **Do not push** if secrets or obvious personal/sensitive data appear — tell the user what to remove and rotate credentials if needed.
+5. Work on `dev`; merge to `master` via PR. No force-push to `master` unless user explicitly requests.
+
+## Never commit
+
+API keys, tokens, passwords, `.env`, private keys, classified/restricted imagery, large personal media, or employer proprietary data.
+
+## Safe defaults
+
+Localhost bind addresses, architecture docs, synthetic/public sample data only, secrets in gitignored `.env` only.

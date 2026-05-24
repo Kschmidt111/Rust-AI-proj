@@ -1,4 +1,4 @@
-//! CLI entrypoints: `serve` (HTTP), `detect` (Phase 2), `process` (Phase 3).
+//! CLI entrypoints: `serve` (HTTP), `detect` (Phase 2), `process` (Phase 3), `motion` (Phase 4D).
 
 use clap::{Parser, Subcommand};
 use seeker_sim::{telemetry, AppConfig, RunError};
@@ -28,6 +28,18 @@ pub enum Commands {
         #[arg(long, short)]
         input: PathBuf,
     },
+    /// Motion centroids via frame differencing (Phase 4D).
+    Motion {
+        /// Directory of PNG/JPEG frames (e.g. `data/frames/dot_run_001`).
+        #[arg(long, short)]
+        input: PathBuf,
+    },
+    /// Motion + Kalman track over a frame folder (Phase 4F).
+    Track {
+        /// Directory of PNG/JPEG frames (e.g. `data/frames/dot_run_001`).
+        #[arg(long, short)]
+        input: PathBuf,
+    },
 }
 
 /// Parses CLI args and runs the selected subcommand.
@@ -48,6 +60,8 @@ pub fn run() -> Result<(), i32> {
         Commands::Serve => run_serve(config),
         Commands::Detect { input } => run_detect(config, input),
         Commands::Process { input } => run_process(config, input),
+        Commands::Motion { input } => run_motion(input),
+        Commands::Track { input } => run_track(config, input),
     }
 }
 
@@ -100,6 +114,100 @@ fn run_process(config: AppConfig, input: PathBuf) -> Result<(), i32> {
         }
         Err(err) => {
             tracing::error!(error = %err, path = %input.display(), "frame pipeline failed");
+            Err(1)
+        }
+    }
+}
+
+fn run_motion(input: PathBuf) -> Result<(), i32> {
+    use seeker_sim::ingest::{FrameSource, IngestError};
+    use seeker_sim::vision::{decode, MotionDetector};
+
+    let paths = match FrameSource::folder(&input).collect_paths() {
+        Ok(p) => p,
+        Err(IngestError::FolderNotFound { path }) => {
+            tracing::error!(path = %path.display(), "folder not found");
+            return Err(1);
+        }
+        Err(IngestError::EmptyFolder { path }) => {
+            tracing::error!(path = %path.display(), "folder has no PNG/JPEG frames");
+            return Err(1);
+        }
+        Err(other) => {
+            tracing::error!(error = %other, "failed to read frame folder");
+            return Err(1);
+        }
+    };
+
+    let mut detector = MotionDetector::new();
+    let mut hits = 0_usize;
+
+    println!("Motion centroids for {} ({} frames)", input.display(), paths.len());
+
+    for (index, path) in paths.iter().enumerate() {
+        let rgb = match decode::load_rgb_image(path) {
+            Ok(img) => img,
+            Err(err) => {
+                tracing::error!(error = %err, path = %path.display(), "decode failed");
+                return Err(1);
+            }
+        };
+
+        match detector.detect(&rgb) {
+            Some((cx, cy)) => {
+                hits += 1;
+                println!("  [{index:04}] centroid ({cx:.1}, {cy:.1})");
+            }
+            None => {
+                println!("  [{index:04}] —");
+            }
+        }
+    }
+
+    println!("Centroids on {hits}/{} frames (frame 0 always skipped)", paths.len());
+    Ok(())
+}
+
+fn run_track(config: AppConfig, input: PathBuf) -> Result<(), i32> {
+    match seeker_sim::pipeline::track_motion_folder(&config, &input) {
+        Ok(summary) => {
+            println!(
+                "Tracked {} frames from {} (track_id={:?})",
+                summary.frame_count,
+                summary.folder.display(),
+                summary.track_id
+            );
+            println!(
+                "Wrote {} rows to {}",
+                summary.track_row_count,
+                summary.tracks_csv.display()
+            );
+            for frame in &summary.frames {
+                match &frame.track {
+                    Some(state) => println!(
+                        "  [{:04}] pos ({:.1}, {:.1}) vel ({:.1}, {:.1}) px/s los={:.4} rad/s={:.4} coast={}",
+                        frame.index,
+                        state.position.0,
+                        state.position.1,
+                        state.velocity.0,
+                        state.velocity.1,
+                        state.los,
+                        state.los_rate,
+                        state.coast_count
+                    ),
+                    None => {
+                        let cent = frame
+                            .centroid
+                            .map(|(x, y)| format!("centroid ({x:.1}, {y:.1})"))
+                            .unwrap_or_else(|| "no centroid".into());
+                        println!("  [{:04}] — ({cent})", frame.index);
+                    }
+                }
+            }
+            Ok(())
+        }
+        Err(err) => {
+            tracing::error!(error = %err, path = %input.display(), "motion track failed");
             Err(1)
         }
     }

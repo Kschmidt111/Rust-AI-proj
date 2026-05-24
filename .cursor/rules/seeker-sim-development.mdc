@@ -1,0 +1,39 @@
+---
+description: SeekerSim development — learn Rust slowly, professional module layout, phased work
+alwaysApply: true
+---
+
+# SeekerSim development standards
+
+Read [docs/DEVELOPMENT.md](../../docs/DEVELOPMENT.md) before writing or reviewing code.
+
+## Pacing
+
+- Follow [docs/LEARNING_ROADMAP.md](../../docs/LEARNING_ROADMAP.md) — one phase or sub-step at a time.
+- Propose the **smallest testable slice** before large implementations.
+- Do not skip phases (e.g. no tracking before single-image detect works).
+- Minimal diffs; no drive-by refactors or speculative features.
+
+## Learning-oriented code
+
+- Every new `pub fn` / `pub struct`: doc comment with summary, args, returns.
+- Add optional `# C# analogy` for non-obvious Rust concepts.
+- Prefer clarity over cleverness.
+
+## Architecture (strict)
+
+- **lib + bin**: thin `main.rs`, logic in `seeker_sim` library modules.
+- **Module deps**: `api → pipeline → services → domain`; `domain` must NOT depend on axum, ort, or api.
+- New features go in the module named in [docs/ARCHITECTURE.md](../../docs/ARCHITECTURE.md) — not in `main.rs`.
+- HTTP only in `api/routes/`; ML only in `vision/`; types in `domain/`.
+- Use `tracing` (not `println!`), `thiserror` + `Result` at boundaries.
+
+## Before finishing a task
+
+- `cargo test` and `cargo build` when Rust code changed.
+- Update ARCHITECTURE / TOOLS / DECISIONS if layout or deps changed.
+- Before push: [rules.md](../../rules.md) and pre-push security rule.
+
+## Git
+
+- Work on `dev`; merge to `master` via PR only.

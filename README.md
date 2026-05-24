@@ -2,7 +2,7 @@
 
 **Visual tracking and closed-loop guidance simulation in Rust.**
 
-SeekerSim ingests video (or frame sequences), uses AI to **detect and track** a fast-moving target, estimates its motion with a filter, and runs a **proportional navigation (PN)** guidance law in software—producing steering commands as if a seeker were processing imagery mid-flight. Everything runs **locally** on your machine; nothing is flown or weaponized.
+SeekerSim ingests video (or frame sequences), uses AI to **detect and track** a fast-moving target, estimates its motion with a filter, and runs a **proportional navigation (PN)** guidance law in software—producing steering commands as if a seeker were processing imagery mid-flight. Everything runs **locally** on your machine.
 
 > **Status:** Phase 0 — documentation and architecture. Application code starts in Phase 1.
 
@@ -97,17 +97,6 @@ Details: [docs/TOOLS.md](docs/TOOLS.md).
 
 ---
 
-## Ethics and how to describe this project
-
-- **Simulation only** — no real munitions, actuators, or flight hardware.
-- **Public/synthetic media only** — sports clips, RC drone footage, or generated moving dots.
-- **Resume wording:** “Rust visual tracking + proportional navigation guidance **simulation**” — not “missile system.”
-
----
-
-## Learning contract
-
-Every public function in application code includes a doc comment (summary, args, returns) and optional **C# analogy** lines. See [docs/LEARNING_ROADMAP.md](docs/LEARNING_ROADMAP.md).
 
 ---
 

@@ -19,6 +19,12 @@ pub struct AppConfig {
     pub server: ServerConfig,
     /// Vision / ONNX settings (`[vision]` in TOML).
     pub vision: VisionConfig,
+    /// Tracker settings (`[tracking]` in TOML).
+    pub tracking: TrackingConfig,
+    /// Simulation timestep (`[sim]` in TOML) — used as frame `dt` until ingest exposes timestamps.
+    pub sim: SimConfig,
+    /// Output paths (`[paths]` in TOML).
+    pub paths: PathsConfig,
 }
 
 /// `[server]` section — where the Axum listener binds.
@@ -57,6 +63,50 @@ impl VisionConfig {
     /// Resolves `model_path` relative to repo root when not absolute.
     pub fn resolve_model_path(&self) -> PathBuf {
         let path = PathBuf::from(&self.model_path);
+        if path.is_absolute() {
+            return path;
+        }
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../..")
+            .join(path)
+    }
+}
+
+/// `[tracking]` section — association and coast limits (Phase 4+).
+#[derive(Debug, Clone, Deserialize)]
+pub struct TrackingConfig {
+    /// Minimum IoU to match a YOLO detection to a track (bbox path).
+    pub iou_match_threshold: f32,
+    /// Drop track after this many frames without a measurement.
+    pub max_coast_frames: u32,
+    /// Max pixel distance to associate a motion centroid to a predicted track point.
+    pub point_match_distance_px: f32,
+    /// Half-width of ROI motion search window (pixels) while tracking.
+    pub roi_half_size_px: u32,
+    /// Brightness-change threshold for motion differencing `[0.0, 1.0]`.
+    pub motion_threshold: f32,
+}
+
+/// `[sim]` section — simulation timing (Phase 5+); `dt_seconds` reused for tracking steps.
+#[derive(Debug, Clone, Deserialize)]
+pub struct SimConfig {
+    /// Seconds per frame step (~30 fps default).
+    pub dt_seconds: f32,
+    /// Initial miss distance in sim units (Phase 5).
+    pub initial_miss_distance: f32,
+}
+
+/// `[paths]` section — where run artifacts are written.
+#[derive(Debug, Clone, Deserialize)]
+pub struct PathsConfig {
+    /// Base directory for per-run output (e.g. `data/output`).
+    pub output_dir: String,
+}
+
+impl PathsConfig {
+    /// Resolves `output_dir` relative to repo root when not absolute.
+    pub fn resolve_output_dir(&self) -> PathBuf {
+        let path = PathBuf::from(&self.output_dir);
         if path.is_absolute() {
             return path;
         }
@@ -134,6 +184,10 @@ mod tests {
         let config = AppConfig::load_from_path(&path).expect("default config should parse");
         assert_eq!(config.server.bind, "127.0.0.1:8080");
         assert_eq!(config.vision.input_size, 640);
+        assert_eq!(config.tracking.max_coast_frames, 15);
+        assert_eq!(config.tracking.roi_half_size_px, 32);
+        assert!((config.sim.dt_seconds - 0.033).abs() < 1e-6);
+        assert_eq!(config.paths.output_dir, "data/output");
         assert!(config.server.socket_addr().is_ok());
     }
 }

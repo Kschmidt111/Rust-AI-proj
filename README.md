@@ -2,17 +2,67 @@
 
 **Visual tracking and closed-loop guidance simulation in Rust.**
 
-SeekerSim ingests video (or frame sequences), uses AI to **detect and track** a fast-moving target, estimates its motion with a filter, and runs a **proportional navigation (PN)** guidance law in software—producing steering commands as if a seeker were processing imagery mid-flight. Everything runs **locally** on your machine.
+SeekerSim ingests video (or frame sequences), uses AI to **detect and track** a fast-moving target, estimates its motion with a filter, and runs a **proportional navigation (PN)** guidance law in software—producing steering commands for a simulated pursuer. Everything runs **locally** on your machine.
 
-> **Status:** Phase 0 — documentation and architecture. Application code starts in Phase 1.
+**Portfolio intent:** Not an OpenAI wrapper—a **local ML platform** (ONNX vision + optional Qdrant + Ollama) with full Rust orchestration. See [docs/PROJECT_BRIEF.md](docs/PROJECT_BRIEF.md#design-north-star--ai-engineer-positioning-2026).
+
+> **Status (2026-05):** Phases **1–4** complete — health API, YOLO detect, frame pipeline, motion + Kalman tracking with `tracks.csv`. **Next:** Phase 5 guidance + sim intercept.
 
 **Repository:** [github.com/Kschmidt111/Rust-AI-proj](https://github.com/Kschmidt111/Rust-AI-proj)
 
 ---
 
-## What it does (one paragraph)
+## What works today
 
-A Rust application reads frames from a file, folder, or camera, detects objects with an **ONNX** model (YOLO), associates detections into a **stable track**, smooths motion with a **Kalman filter**, computes **line-of-sight (LOS)** angles to the target, and feeds a **guidance** module that outputs commanded acceleration for a **2D simulator** (interceptor vs target). Results are logged as JSON/CSV and can be plotted for demos.
+| Phase | Feature | Command |
+|-------|---------|---------|
+| **1** | HTTP health API | `cargo run` → `curl http://127.0.0.1:8080/health` |
+| **2** | Single-image YOLO (ONNX) | `cargo run -- detect --input data/samples/test.jpg` |
+| **3** | Frame folder pipeline | `cargo run -- process --input data/frames/dot_run_001` |
+| **4** | Motion + Kalman track | `cargo run -- track --input data/frames/dot_run_001` |
+
+Full crate commands and layout: [crates/seeker-sim/README.md](crates/seeker-sim/README.md).
+
+---
+
+## Quick start (fresh clone)
+
+From repo root (Windows PowerShell):
+
+```powershell
+# 1. Dependencies (one-time)
+.\scripts\download-model.ps1
+.\scripts\download-sample-image.ps1
+
+# 2. Build
+cd crates\seeker-sim
+cargo test
+
+# 3. Single image → JSON detections
+cargo run -- detect --input ../../data/samples/test.jpg
+
+# 4. Synthetic frame sequence (100 PNGs) → per-frame log
+cd ..\..
+.\scripts\generate-dot-video.ps1
+cd crates\seeker-sim
+$env:RUST_LOG = "seeker_sim=info"
+cargo run -- process --input ../../data/frames/dot_run_001
+```
+
+`models/` and `data/` contents are **gitignored**—use the scripts above after clone.
+
+---
+
+## CLI overview
+
+| Subcommand | Purpose |
+|------------|---------|
+| `serve` (default) | Axum server on `127.0.0.1:8080` |
+| `detect --input <image>` | One-shot YOLO → JSON to stdout |
+| `process --input <folder>` | Sorted PNG/JPEG folder → detection count + ms per frame |
+| `track --input <folder>` | Motion + Kalman track → `tracks.csv` under `data/output/` |
+
+Config: [config/default.toml](config/default.toml) (model path, thresholds, bind address).
 
 ---
 
@@ -21,84 +71,83 @@ A Rust application reads frames from a file, folder, or camera, detects objects 
 ```mermaid
 flowchart TB
   subgraph inputs [Inputs]
-    VID[Video file / frame folder]
-    CAM[Webcam - optional later]
+    VID[Video / frame folder]
+    IMG[Single image]
   end
   subgraph seeker_sim [seeker-sim - Rust]
-    ING[Frame ingest]
-    DET[ONNX detector]
-    TRK[Tracker + Kalman]
-    GUI[Guidance PN]
-    SIM[2D simulator]
+    ING[ingest / frame_source]
+    DET[vision / YOLO ONNX]
+    TRK[tracking + Kalman - Phase 4]
+    GUI[guidance PN - Phase 5]
+    SIM[2D simulator - Phase 5]
     API[HTTP API - Axum]
-    LOG[Telemetry log]
+    LOG[telemetry]
   end
   subgraph outputs [Outputs]
     CSV[tracks.csv / guidance.csv]
     PNG[Plot images]
     HTTP[REST JSON]
   end
-  VID --> ING
-  CAM --> ING
-  ING --> DET --> TRK --> GUI --> SIM
+  IMG --> DET
+  VID --> ING --> DET
+  DET --> TRK --> GUI --> SIM
   TRK --> LOG
-  GUI --> LOG
-  SIM --> LOG
-  API --> ING
-  LOG --> CSV
-  LOG --> PNG
   API --> HTTP
 ```
 
 ---
 
-## Documentation map (reference hub)
+## Documentation map
 
 | Document | Use when you need… |
 |----------|---------------------|
-| [docs/PROJECT_BRIEF.md](docs/PROJECT_BRIEF.md) | Goals, scope, interview pitch, ethics |
-| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Components, data flow, types, **file tree** |
-| [docs/TOOLS.md](docs/TOOLS.md) | **Every tool/library, why we chose it, what it does** |
+| **[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)** | Coding standards, learning pace, module rules |
+| **[docs/PROJECT_BRIEF.md](docs/PROJECT_BRIEF.md)** | Goals, scope, AI engineer north star, interview pitches |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Components, data flow, types, file tree |
+| [docs/TOOLS.md](docs/TOOLS.md) | Every tool/library and why we chose it |
 | [docs/LEARNING_ROADMAP.md](docs/LEARNING_ROADMAP.md) | Phased build + Rust learning goals |
-| [docs/DECISIONS.md](docs/DECISIONS.md) | Architecture decision records |
+| [docs/DECISIONS.md](docs/DECISIONS.md) | Architecture decision records (ADRs) |
 | [docs/GLOSSARY.md](docs/GLOSSARY.md) | Tracking & guidance terminology |
+| [docs/GITHUB_SETUP.md](docs/GITHUB_SETUP.md) | `dev` / `master` branch workflow |
 
 ---
 
-## Repository layout (planned)
+## Repository layout
 
 ```
 Rust-AI-proj/
-├── docs/                      # Reference documentation (start here)
-├── crates/
-│   └── seeker-sim/            # Main Rust binary + library modules
-├── models/                    # Gitignored — YOLO ONNX weights
-├── data/                      # Gitignored — videos, frames, outputs
-├── scripts/                   # ffmpeg frame extract, model download
-├── config/
-│   └── default.toml           # Paths, thresholds, sim parameters
+├── docs/                      # Reference documentation
+├── crates/seeker-sim/         # Rust binary + library (see crate README)
+├── models/                    # Gitignored — yolov8n.onnx
+├── data/                      # Gitignored — samples, frames, output
+├── scripts/                   # Download model, extract frames, pre-push check
+├── config/default.toml        # Server, vision, tracking thresholds
 └── README.md
 ```
 
-Full module breakdown: [docs/ARCHITECTURE.md#repository--file-structure](docs/ARCHITECTURE.md#repository--file-structure).
+Module breakdown: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ---
 
-## Prerequisites (before Phase 1 code)
+## Prerequisites
 
 | Tool | Purpose |
 |------|---------|
-| [Rust (rustup)](https://rustup.rs/) | Build and run the project |
-| [Visual Studio Build Tools](https://visualstudio.microsoft.com/downloads/) (Windows) | C++ toolchain for some native deps |
-| [ffmpeg](https://ffmpeg.org/) (optional Phase 3+) | Extract frames from video on Windows without OpenCV build pain |
-| NVIDIA GPU + CUDA (optional) | Faster ONNX inference via execution provider |
+| [Rust (rustup)](https://rustup.rs/) | Build and run |
+| [Visual Studio Build Tools](https://visualstudio.microsoft.com/downloads/) (Windows) | Native deps for ONNX Runtime |
+| [ffmpeg](https://ffmpeg.org/) (optional) | `scripts/extract-frames.ps1` — MP4 → PNG |
+| NVIDIA GPU (optional) | Faster ONNX via CUDA execution provider |
 
 Details: [docs/TOOLS.md](docs/TOOLS.md).
 
 ---
 
+## Learning contract
+
+Public functions include doc comments (summary, args, returns) and optional **C# analogies**. Standards: [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) · [docs/LEARNING_ROADMAP.md](docs/LEARNING_ROADMAP.md).
 
 ---
 
-## Quick links
+## Security before push
 
+Run `.\scripts\pre-push-check.ps1` before `git push`. See [rules.md](rules.md).

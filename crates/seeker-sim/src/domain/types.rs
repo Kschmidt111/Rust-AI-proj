@@ -29,3 +29,29 @@ pub struct Detection {
     pub confidence: f32,
     pub bbox: BBox,
 }
+
+/// Filtered target state for one frame (Phase 4+).
+///
+/// Produced by the tracker after Kalman predict/update. Line-of-sight fields
+/// stay at `0.0` until `tracking/los.rs` is wired in a later sub-step.
+///
+/// # C# analogy
+/// A DTO returned from a tracking service — like `TrackSnapshot` with id,
+/// position, velocity, and coast metadata for telemetry CSV rows.
+#[derive(Debug, Clone, Serialize, PartialEq)]
+pub struct TrackState {
+    /// Stable id for this target across frames.
+    pub track_id: u64,
+    /// Zero-based frame index in the current run.
+    pub frame_index: u64,
+    /// Filtered center `(x, y)` in image pixels.
+    pub position: (f32, f32),
+    /// Filtered velocity `(vx, vy)` in pixels per second.
+    pub velocity: (f32, f32),
+    /// Bearing from seeker reference to target (radians); filled by `los.rs` later.
+    pub los: f32,
+    /// Rate of change of line-of-sight (rad/s); filled by `los.rs` later.
+    pub los_rate: f32,
+    /// Consecutive frames without a measurement (Kalman coast).
+    pub coast_count: u32,
+}

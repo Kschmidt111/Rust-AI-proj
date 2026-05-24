@@ -1,7 +1,10 @@
-//! Logging and metrics bootstrap.
-//!
-//! Phase 1 initializes structured console logs. Later phases add spans around
-//! detect/track/guide and optional Prometheus export.
+//! Logging bootstrap and run telemetry export (CSV).
+
+pub mod record;
+pub mod writer;
+
+pub use record::TrackRecord;
+pub use writer::{new_run_id, write_tracks_csv, TelemetryError, TracksCsvWriter};
 
 use tracing_subscriber::{EnvFilter, fmt, prelude::*};
 

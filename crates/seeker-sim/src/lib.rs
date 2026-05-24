@@ -9,6 +9,7 @@ pub mod domain;
 pub mod ingest;
 pub mod pipeline;
 pub mod telemetry;
+pub mod tracking;
 pub mod vision;
 
 pub use config::AppConfig;

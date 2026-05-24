@@ -20,7 +20,7 @@ Source: [Ultralytics assets v8.4.0](https://github.com/ultralytics/assets/releas
 
 ## License
 
-Ultralytics YOLO is **AGPL-3.0**. Public OSS portfolio use is fine; note in interviews/docs. See [docs/PROJECT_BRIEF.md](../docs/PROJECT_BRIEF.md).
+Ultralytics YOLO is **AGPL-3.0**. Public OSS portfolio use is fine; note in interviews/docs.
 
 ## Config
 

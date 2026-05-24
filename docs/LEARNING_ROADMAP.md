@@ -4,7 +4,7 @@ Phased plan for a **C# developer (~4 years)** learning **Rust** while building v
 
 **Architecture reference:** [ARCHITECTURE.md](ARCHITECTURE.md)  
 **Tools reference:** [TOOLS.md](TOOLS.md)  
-**AI engineer positioning (founder north star):** [PROJECT_BRIEF.md § Design north star](PROJECT_BRIEF.md#design-north-star--ai-engineer-positioning-2026)
+**AI engineer positioning:** Local models, vector DB ingestion, low-latency orchestration (not an OpenAI wrapper).
 
 ---
 
@@ -28,8 +28,8 @@ Phased plan for a **C# developer (~4 years)** learning **Rust** while building v
 
 **Deliverables**
 
-- [x] PROJECT_BRIEF, ARCHITECTURE, TOOLS, this roadmap
-- [ ] Push to GitHub when ready ([GITHUB_SETUP.md](GITHUB_SETUP.md))
+- [x] ARCHITECTURE, TOOLS, this roadmap
+- [x] Push to GitHub when ready (branch workflow in [DEVELOPMENT.md §7](DEVELOPMENT.md#7-git-workflow))
 
 **Reading**
 
@@ -158,7 +158,7 @@ cargo run -- process --input ../../data/frames/dot_run_001
 
 **Goal:** After each run, detection/run summaries are **embedded and upserted** to **Qdrant**; semantic search returns past events.
 
-**Why (2026 portfolio):** Custom **continuous ingestion** into a vector DB—not a one-off script. See [PROJECT_BRIEF.md](PROJECT_BRIEF.md#design-north-star--ai-engineer-positioning-2026).
+**Why (2026 portfolio):** Custom **continuous ingestion** into a vector DB—not a one-off script.
 
 **Steps**
 

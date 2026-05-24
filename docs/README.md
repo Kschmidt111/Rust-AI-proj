@@ -22,16 +22,14 @@ Details per phase: [LEARNING_ROADMAP.md](LEARNING_ROADMAP.md).
 ## Start here
 
 0. **[DEVELOPMENT.md](DEVELOPMENT.md)** — how we code, learn Rust, scale the repo  
-1. **[PROJECT_BRIEF.md](PROJECT_BRIEF.md)** — goals; **AI engineer north star (2026)**  
-2. [TOOLS.md](TOOLS.md) — tools/libraries and rationale  
-3. [ARCHITECTURE.md](ARCHITECTURE.md) — diagrams, flows, types, file structure  
-4. [LEARNING_ROADMAP.md](LEARNING_ROADMAP.md) — what to build each phase  
+1. [TOOLS.md](TOOLS.md) — tools/libraries and rationale  
+2. [ARCHITECTURE.md](ARCHITECTURE.md) — diagrams, flows, types, file structure  
+3. [LEARNING_ROADMAP.md](LEARNING_ROADMAP.md) — what to build each phase  
 
 ## Reference
 
 - [DECISIONS.md](DECISIONS.md) — ADRs (e.g. ADR-017 hybrid perception for small targets)  
 - [GLOSSARY.md](GLOSSARY.md) — terminology  
-- [GITHUB_SETUP.md](GITHUB_SETUP.md) — GitHub / branch workflow  
 
 ## Data flow (current + planned)
 

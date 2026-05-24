@@ -4,7 +4,7 @@
 
 SeekerSim ingests video (or frame sequences), uses AI to **detect and track** a fast-moving target, estimates its motion with a filter, and runs a **proportional navigation (PN)** guidance law in software—producing steering commands for a simulated pursuer. Everything runs **locally** on your machine.
 
-**Portfolio intent:** Not an OpenAI wrapper—a **local ML platform** (ONNX vision + optional Qdrant + Ollama) with full Rust orchestration. See [docs/PROJECT_BRIEF.md](docs/PROJECT_BRIEF.md#design-north-star--ai-engineer-positioning-2026).
+**Portfolio intent:** Not an OpenAI wrapper—a **local ML platform** (ONNX vision + optional Qdrant + Ollama) with full Rust orchestration.
 
 > **Status (2026-05):** Phases **1–4** complete — health API, YOLO detect, frame pipeline, motion + Kalman tracking with `tracks.csv`. **Next:** Phase 5 guidance + sim intercept.
 
@@ -102,13 +102,11 @@ flowchart TB
 | Document | Use when you need… |
 |----------|---------------------|
 | **[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)** | Coding standards, learning pace, module rules |
-| **[docs/PROJECT_BRIEF.md](docs/PROJECT_BRIEF.md)** | Goals, scope, AI engineer north star, interview pitches |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Components, data flow, types, file tree |
 | [docs/TOOLS.md](docs/TOOLS.md) | Every tool/library and why we chose it |
 | [docs/LEARNING_ROADMAP.md](docs/LEARNING_ROADMAP.md) | Phased build + Rust learning goals |
 | [docs/DECISIONS.md](docs/DECISIONS.md) | Architecture decision records (ADRs) |
 | [docs/GLOSSARY.md](docs/GLOSSARY.md) | Tracking & guidance terminology |
-| [docs/GITHUB_SETUP.md](docs/GITHUB_SETUP.md) | `dev` / `master` branch workflow |
 
 ---
 

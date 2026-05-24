@@ -38,3 +38,7 @@ models/*
 *.onnx
 data/*
 !data/README.md
+
+# Local-only docs (not for public repo)
+docs/GITHUB_SETUP.md
+docs/PROJECT_BRIEF.md

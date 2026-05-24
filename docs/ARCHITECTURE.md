@@ -393,13 +393,12 @@ Rust-AI-proj/
 │   └── default.toml              # Default parameters (committed)
 │
 ├── docs/
-│   ├── PROJECT_BRIEF.md          # What & why
 │   ├── ARCHITECTURE.md           # This file
 │   ├── TOOLS.md                  # Stack rationale
 │   ├── LEARNING_ROADMAP.md       # Phases
 │   ├── DECISIONS.md              # ADRs
 │   ├── GLOSSARY.md
-│   └── GITHUB_SETUP.md
+│   └── README.md
 │
 ├── crates/
 │   └── seeker-sim/

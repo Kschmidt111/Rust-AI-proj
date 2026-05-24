@@ -129,7 +129,7 @@ Decisions for **SeekerSim**. Superseded Sentinel ISR ADRs are listed at the bott
 
 **Context:** Founder guidance for 2026: local open models, vector DB ingestion, low-latency orchestration—not OpenAI wrappers. User also targets defense/perception and AI engineer roles.
 
-**Decision:** One repo, two phased tracks in [PROJECT_BRIEF.md](PROJECT_BRIEF.md):
+**Decision:** One repo, two phased tracks:
 - **Phases 2–6:** ONNX vision, tracking, guidance, latency metrics (perception story).
 - **Phases 7–8:** Qdrant continuous ingestion + Ollama RAG (AI engineer story).
 

@@ -10,7 +10,7 @@ Related docs: [LEARNING_ROADMAP.md](LEARNING_ROADMAP.md) · [ARCHITECTURE.md](AR
 
 ## 1. Core principles
 
-**Portfolio north star:** [PROJECT_BRIEF.md § Design north star](PROJECT_BRIEF.md#design-north-star--ai-engineer-positioning-2026) — local models, vector DB ingestion, low-latency orchestration (not an OpenAI wrapper).
+**Portfolio north star:** Local models, vector DB ingestion, low-latency orchestration (not an OpenAI wrapper).
 
 | Principle | Meaning |
 |-----------|---------|
@@ -156,10 +156,11 @@ Use this for Phase 2 onward:
 Before push:
 
 ```powershell
+cd C:\Projects\Rust-AI-proj   # your local clone
 .\scripts\pre-push-check.ps1
 ```
 
-See [GITHUB_SETUP.md](GITHUB_SETUP.md).
+**Branch flow:** commit on `dev` → push `origin dev` → open PR **base `master`**, **compare `dev`**. After merge, sync local `dev` with `master`.
 
 ---
 

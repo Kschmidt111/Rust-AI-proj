@@ -17,6 +17,8 @@ clap = { version = "4", features = ["derive"] }
 # Phase 2 — vision
 image = { version = "0.25", default-features = false, features = ["jpeg", "png"] }
 ort = { version = "2.0.0-rc.12", features = ["download-binaries"] }
+# Phase 5D — trajectory PNG
+plotters = "0.3"
 
 [dev-dependencies]
 # In-memory HTTP testing for route handlers.

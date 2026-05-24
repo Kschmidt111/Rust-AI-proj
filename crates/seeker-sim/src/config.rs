@@ -21,6 +21,8 @@ pub struct AppConfig {
     pub vision: VisionConfig,
     /// Tracker settings (`[tracking]` in TOML).
     pub tracking: TrackingConfig,
+    /// Guidance law settings (`[guidance]` in TOML) — Phase 5+.
+    pub guidance: GuidanceConfig,
     /// Simulation timestep (`[sim]` in TOML) — used as frame `dt` until ingest exposes timestamps.
     pub sim: SimConfig,
     /// Output paths (`[paths]` in TOML).
@@ -85,6 +87,29 @@ pub struct TrackingConfig {
     pub roi_half_size_px: u32,
     /// Brightness-change threshold for motion differencing `[0.0, 1.0]`.
     pub motion_threshold: f32,
+}
+
+/// `[guidance]` section — PN / pure pursuit parameters (Phase 5+).
+#[derive(Debug, Clone, Deserialize)]
+pub struct GuidanceConfig {
+    /// `"pp"` = pure pursuit, `"pn"` = proportional navigation.
+    pub law: String,
+    /// Navigation constant `N` for PN (dimensionless).
+    pub navigation_constant: f32,
+    /// Closing velocity `V_c` for PN (sim units).
+    pub closing_velocity: f32,
+}
+
+impl GuidanceConfig {
+    /// Returns true when config selects proportional navigation.
+    pub fn is_pn(&self) -> bool {
+        self.law.eq_ignore_ascii_case("pn")
+    }
+
+    /// Returns true when config selects pure pursuit.
+    pub fn is_pp(&self) -> bool {
+        self.law.eq_ignore_ascii_case("pp")
+    }
 }
 
 /// `[sim]` section — simulation timing (Phase 5+); `dt_seconds` reused for tracking steps.
@@ -186,6 +211,11 @@ mod tests {
         assert_eq!(config.vision.input_size, 640);
         assert_eq!(config.tracking.max_coast_frames, 15);
         assert_eq!(config.tracking.roi_half_size_px, 32);
+        assert_eq!(config.guidance.law, "pn");
+        assert!((config.guidance.navigation_constant - 3.0).abs() < 1e-6);
+        assert!((config.guidance.closing_velocity - 100.0).abs() < 1e-6);
+        assert!(config.guidance.is_pn());
+        assert!(!config.guidance.is_pp());
         assert!((config.sim.dt_seconds - 0.033).abs() < 1e-6);
         assert_eq!(config.paths.output_dir, "data/output");
         assert!(config.server.socket_addr().is_ok());

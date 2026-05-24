@@ -40,6 +40,12 @@ pub enum Commands {
         #[arg(long, short)]
         input: PathBuf,
     },
+    /// Motion track + PN guidance + 2D sim (Phase 5C).
+    Intercept {
+        /// Directory of PNG/JPEG frames (e.g. `data/frames/dot_run_001`).
+        #[arg(long, short)]
+        input: PathBuf,
+    },
 }
 
 /// Parses CLI args and runs the selected subcommand.
@@ -62,6 +68,7 @@ pub fn run() -> Result<(), i32> {
         Commands::Process { input } => run_process(config, input),
         Commands::Motion { input } => run_motion(input),
         Commands::Track { input } => run_track(config, input),
+        Commands::Intercept { input } => run_intercept(config, input),
     }
 }
 
@@ -208,6 +215,37 @@ fn run_track(config: AppConfig, input: PathBuf) -> Result<(), i32> {
         }
         Err(err) => {
             tracing::error!(error = %err, path = %input.display(), "motion track failed");
+            Err(1)
+        }
+    }
+}
+
+fn run_intercept(config: AppConfig, input: PathBuf) -> Result<(), i32> {
+    match seeker_sim::pipeline::intercept_motion_folder(&config, &input) {
+        Ok(summary) => {
+            println!(
+                "Intercept {} frames from {} (track_id={:?})",
+                summary.frame_count,
+                summary.folder.display(),
+                summary.track_id
+            );
+            println!(
+                "Wrote tracks={} guidance={} sim={} rows",
+                summary.track_row_count,
+                summary.guidance_row_count,
+                summary.sim_row_count,
+            );
+            println!("  {}", summary.tracks_csv.display());
+            println!("  {}", summary.guidance_csv.display());
+            println!("  {}", summary.sim_csv.display());
+            println!("  {}", summary.trajectory_png.display());
+            if let Some(min_miss) = summary.min_miss_distance {
+                println!("  min miss distance: {min_miss:.1} sim units");
+            }
+            Ok(())
+        }
+        Err(err) => {
+            tracing::error!(error = %err, path = %input.display(), "intercept run failed");
             Err(1)
         }
     }

@@ -1,4 +1,4 @@
-//! CLI entrypoints: `serve` (HTTP) and `detect` (Phase 2 vision).
+//! CLI entrypoints: `serve` (HTTP), `detect` (Phase 2), `process` (Phase 3).
 
 use clap::{Parser, Subcommand};
 use seeker_sim::{telemetry, AppConfig, RunError};
@@ -22,6 +22,12 @@ pub enum Commands {
         #[arg(long, short)]
         input: PathBuf,
     },
+    /// Process a folder of frames in order (Phase 3).
+    Process {
+        /// Directory of PNG/JPEG frames (e.g. `data/frames/run_001`).
+        #[arg(long, short)]
+        input: PathBuf,
+    },
 }
 
 /// Parses CLI args and runs the selected subcommand.
@@ -41,6 +47,7 @@ pub fn run() -> Result<(), i32> {
     match cli.command.unwrap_or(Commands::Serve) {
         Commands::Serve => run_serve(config),
         Commands::Detect { input } => run_detect(config, input),
+        Commands::Process { input } => run_process(config, input),
     }
 }
 
@@ -67,6 +74,32 @@ fn run_detect(config: AppConfig, input: PathBuf) -> Result<(), i32> {
         }
         Err(err) => {
             tracing::error!(error = %err, path = %input.display(), "detection failed");
+            Err(1)
+        }
+    }
+}
+
+fn run_process(config: AppConfig, input: PathBuf) -> Result<(), i32> {
+    match seeker_sim::pipeline::process_frame_folder(&config, &input) {
+        Ok(summary) => {
+            println!(
+                "Processed {} frames from {} ({} total detections)",
+                summary.frame_count,
+                summary.folder.display(),
+                summary.total_detections
+            );
+            for frame in &summary.frames {
+                println!(
+                    "  [{:04}] {} detections ({:.1} ms)",
+                    frame.index,
+                    frame.detection_count,
+                    frame.elapsed_ms
+                );
+            }
+            Ok(())
+        }
+        Err(err) => {
+            tracing::error!(error = %err, path = %input.display(), "frame pipeline failed");
             Err(1)
         }
     }

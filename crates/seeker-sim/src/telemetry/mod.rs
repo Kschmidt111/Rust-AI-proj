@@ -1,8 +1,11 @@
 //! Logging bootstrap and run telemetry export (CSV).
 
+pub mod latency;
 pub mod plot;
 pub mod record;
 pub mod writer;
+
+pub use latency::{summarize_frame_latency, FrameLatencySummary};
 
 pub use plot::write_trajectory_png;
 pub use record::{GuidanceRecord, SimRecord, TrackRecord};

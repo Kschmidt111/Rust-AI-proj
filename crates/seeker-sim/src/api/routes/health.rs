@@ -24,7 +24,7 @@ pub fn router() -> Router {
 /// # Returns
 /// HTTP 200 with `{ "status": "ok", "service": "seeker-sim" }`.
 #[instrument(name = "http.health", skip_all)]
-async fn health_handler() -> Json<HealthResponse> {
+pub async fn health_handler() -> Json<HealthResponse> {
     tracing::debug!("health check requested");
 
     Json(HealthResponse {

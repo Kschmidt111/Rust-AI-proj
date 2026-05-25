@@ -58,7 +58,8 @@ pub async fn run(config: AppConfig) -> Result<(), RunError> {
         bind: config.server.bind.clone(),
         source,
     })?;
-    let router = api::router();
+    let bind = config.server.bind.clone();
+    let router = api::router(config);
 
     let listener = tokio::net::TcpListener::bind(address)
         .await
@@ -66,7 +67,8 @@ pub async fn run(config: AppConfig) -> Result<(), RunError> {
 
     tracing::info!(
         %address,
-        bind = %config.server.bind,
+        bind = %bind,
+        ui = %format!("http://{address}/"),
         "seeker-sim listening"
     );
 

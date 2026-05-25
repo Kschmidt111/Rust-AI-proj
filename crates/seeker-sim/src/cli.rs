@@ -1,8 +1,12 @@
-//! CLI entrypoints: `serve` (HTTP), `detect` (Phase 2), `process` (Phase 3), `motion` (Phase 4D).
+//! CLI entrypoints: `serve` (HTTP), `detect`, `process`, `track`, `intercept`, `run` (Phase 6F).
 
 use clap::{Parser, Subcommand};
-use seeker_sim::{telemetry, AppConfig, RunError};
-use std::path::PathBuf;
+use seeker_sim::{
+    pipeline::{intercept_motion_folder, resolve_input_path, track_motion_folder},
+    telemetry::{self, summarize_frame_latency},
+    AppConfig, RunError,
+};
+use std::path::{Path, PathBuf};
 
 /// SeekerSim — visual tracking and guidance simulation.
 #[derive(Parser, Debug)]
@@ -16,6 +20,15 @@ pub struct Cli {
 pub enum Commands {
     /// Start the HTTP API server (default).
     Serve,
+    /// Portfolio batch demo: intercept (or track) + latency summary (Phase 6F).
+    Run {
+        /// Directory of PNG/JPEG frames (e.g. `data/frames/dot_run_001`).
+        #[arg(long, short)]
+        input: PathBuf,
+        /// `intercept` (default) or `track`.
+        #[arg(long, default_value = "intercept")]
+        mode: String,
+    },
     /// Run YOLO detection on a single image (Phase 2).
     Detect {
         /// Path to `.jpg` or `.png` (e.g. `data/samples/test.jpg`).
@@ -64,6 +77,7 @@ pub fn run() -> Result<(), i32> {
 
     match cli.command.unwrap_or(Commands::Serve) {
         Commands::Serve => run_serve(config),
+        Commands::Run { input, mode } => run_demo(config, input, mode),
         Commands::Detect { input } => run_detect(config, input),
         Commands::Process { input } => run_process(config, input),
         Commands::Motion { input } => run_motion(input),
@@ -75,7 +89,10 @@ pub fn run() -> Result<(), i32> {
 fn run_serve(config: AppConfig) -> Result<(), i32> {
     let rt = tokio::runtime::Runtime::new().expect("tokio runtime");
     if let Ok(address) = config.server.socket_addr() {
-        tracing::info!(%address, "try: curl http://{address}/health");
+        tracing::info!(
+            %address,
+            "UI: http://{address}/  ·  health: http://{address}/health  ·  replay + sim viewer on same host"
+        );
     }
 
     rt.block_on(async {
@@ -85,6 +102,98 @@ fn run_serve(config: AppConfig) -> Result<(), i32> {
         }
         Ok(())
     })
+}
+
+/// Batch demo: full pipeline on a frame folder + p50/p95 latency (browser replay is separate).
+fn run_demo(config: AppConfig, input: PathBuf, mode: String) -> Result<(), i32> {
+    let input_str = input.to_string_lossy().into_owned();
+    let folder = match resolve_input_path(&input_str) {
+        Ok(p) => p,
+        Err(err) => {
+            tracing::error!(error = %err, path = %input_str, "invalid input path");
+            return Err(1);
+        }
+    };
+
+    let mode_lc = mode.to_ascii_lowercase();
+    match mode_lc.as_str() {
+        "intercept" => run_demo_intercept(config, &folder),
+        "track" => run_demo_track(config, &folder),
+        _ => {
+            tracing::error!(mode = %mode, "unknown mode — use 'intercept' or 'track'");
+            Err(1)
+        }
+    }
+}
+
+fn run_demo_intercept(config: AppConfig, folder: &Path) -> Result<(), i32> {
+    match intercept_motion_folder(&config, folder) {
+        Ok(summary) => {
+            let elapsed: Vec<f64> = summary.frames.iter().map(|f| f.elapsed_ms).collect();
+            print_latency_block("Per-frame pipeline", &elapsed);
+
+            println!(
+                "\nRun complete · {} frames · run_id={}",
+                summary.frame_count, summary.run_id
+            );
+            println!("  {}", summary.tracks_csv.display());
+            println!("  {}", summary.guidance_csv.display());
+            println!("  {}", summary.sim_csv.display());
+            println!("  {}", summary.trajectory_png.display());
+            if let Some(min_miss) = summary.min_miss_distance {
+                println!("  min miss distance: {min_miss:.1} sim units");
+            }
+
+            if let Ok(addr) = config.server.socket_addr() {
+                println!(
+                    "\nBrowser replay: http://{addr}/ → Run replay → paste run_id `{}`",
+                    summary.run_id
+                );
+            }
+            Ok(())
+        }
+        Err(err) => {
+            tracing::error!(error = %err, path = %folder.display(), "run failed");
+            Err(1)
+        }
+    }
+}
+
+fn run_demo_track(config: AppConfig, folder: &Path) -> Result<(), i32> {
+    match track_motion_folder(&config, folder) {
+        Ok(summary) => {
+            let elapsed: Vec<f64> = summary.frames.iter().map(|f| f.elapsed_ms).collect();
+            print_latency_block("Per-frame pipeline", &elapsed);
+
+            println!(
+                "\nRun complete · {} frames · run_id={:?}",
+                summary.frame_count, summary.track_id
+            );
+            println!(
+                "  {} ({} rows)",
+                summary.tracks_csv.display(),
+                summary.track_row_count
+            );
+            Ok(())
+        }
+        Err(err) => {
+            tracing::error!(error = %err, path = %folder.display(), "run failed");
+            Err(1)
+        }
+    }
+}
+
+/// Prints p50 / p95 / max ms for a list of per-frame timings.
+fn print_latency_block(label: &str, elapsed_ms: &[f64]) {
+    match summarize_frame_latency(elapsed_ms) {
+        Some(s) => {
+            println!(
+                "{label} latency (ms): p50={:.1}  p95={:.1}  max={:.1}  (n={})",
+                s.p50_ms, s.p95_ms, s.max_ms, s.count
+            );
+        }
+        None => println!("{label} latency: no frame timings"),
+    }
 }
 
 fn run_detect(config: AppConfig, input: PathBuf) -> Result<(), i32> {

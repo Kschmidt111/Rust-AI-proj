@@ -18,12 +18,8 @@ SeekerSim ingests video (or frame sequences), uses AI to **detect and track** a 
 
 ## What works today
 
-| Phase | Feature | Command |
-|-------|---------|---------|
-| **1** | HTTP health API | `cargo run` → `curl http://127.0.0.1:8080/health` |
-| **2** | Single-image YOLO (ONNX) | `cargo run -- detect --input data/samples/test.jpg` |
-| **3** | Frame folder pipeline | `cargo run -- process --input data/frames/dot_run_001` |
-| **4** | Motion + Kalman track | `cargo run -- track --input data/frames/dot_run_001` |
+<img width="1054" height="855" alt="seeker sim img" src="https://github.com/user-attachments/assets/a10aff1a-7e8a-4fb9-9bee-14d0fff3e679" />
+
 
 Full crate commands and layout: [crates/seeker-sim/README.md](crates/seeker-sim/README.md).
 

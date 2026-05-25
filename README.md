@@ -1,5 +1,9 @@
 # SeekerSim
 
+This was intended as practice to use claude/cursor to create a demo of a seeker object tracking and changing course to intercept a video of a dot moving across the screen. 
+Also intended was this to be a learning project for exposure to the Rust language. C# analogies are included within as I am a .NET developer currently.
+This repository is to be taken as a learning guide to rust and how to properly design markdown files for a coherent and accurate agentic AI developing experience.
+
 **Visual tracking and closed-loop guidance simulation in Rust.**
 
 SeekerSim ingests video (or frame sequences), uses AI to **detect and track** a fast-moving target, estimates its motion with a filter, and runs a **proportional navigation (PN)** guidance law in software—producing steering commands for a simulated pursuer. Everything runs **locally** on your machine.

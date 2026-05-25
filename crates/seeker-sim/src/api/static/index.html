@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta http-equiv="Cache-Control" content="no-cache" />
+    <title>SeekerSim</title>
+    <link rel="stylesheet" href="/style.css?v=6e-replay-1" />
+  </head>
+  <body>
+    <header class="site-header">
+      <h1>SeekerSim</h1>
+      <p class="tagline">Visual tracking &amp; guidance simulation</p>
+      <p id="health-status" class="health-status" aria-live="polite">Checking API…</p>
+    </header>
+
+    <nav class="page-nav" aria-label="Page sections">
+      <a href="#sim-heading">Sim viewer</a>
+      <a href="#replay-heading">Run replay</a>
+    </nav>
+
+    <main class="layout">
+      <section class="panel" id="replay-panel" aria-labelledby="replay-heading">
+        <h2 id="replay-heading">Run replay</h2>
+        <p class="hint">
+          Paste a folder name from <code>data/output/</code> (e.g. after
+          <code>cargo run -- intercept</code>).
+        </p>
+
+        <form id="replay-form" class="replay-form">
+          <label>
+            Run ID
+            <input
+              type="text"
+              id="replay-run-id"
+              name="run_id"
+              placeholder="run_1779655992830843700"
+              value="run_1779655992830843700"
+              spellcheck="false"
+              required
+            />
+          </label>
+          <button type="submit" id="replay-load" class="primary">Load</button>
+        </form>
+
+        <p id="replay-status" class="sim-status" aria-live="polite"></p>
+
+        <div id="replay-controls" class="replay-controls" hidden>
+          <label class="scrub-label">
+            Frame
+            <input type="range" id="replay-scrub" min="0" max="0" value="0" step="1" />
+            <span id="replay-scrub-val">0 / 0</span>
+          </label>
+          <button type="button" id="replay-play" class="secondary">Play</button>
+        </div>
+
+        <canvas id="replay-canvas" width="640" height="360" aria-label="Run replay canvas"></canvas>
+        <p class="canvas-legend">
+          <span class="dot seeker"></span> Interceptor (sim)
+          <span class="dot target"></span> Target (sim)
+        </p>
+      </section>
+
+      <section class="panel" aria-labelledby="sim-heading">
+        <h2 id="sim-heading">Sim viewer</h2>
+        <p class="hint">
+          Set target position and velocity (sim units: x right, y up), pick a guidance law, then
+          <strong>Go</strong>.
+        </p>
+
+        <form id="sim-form" class="sim-form">
+          <fieldset>
+            <legend class="sr-only">Initial conditions</legend>
+
+            <label>
+              Target X
+              <input type="number" name="target_x" value="400" step="1" required />
+            </label>
+            <label>
+              Target Y
+              <input type="number" name="target_y" value="80" step="1" required />
+            </label>
+            <label>
+              Target Vx
+              <input type="number" name="target_vx" value="50" step="1" required />
+            </label>
+            <label>
+              Target Vy
+              <input type="number" name="target_vy" value="10" step="1" required />
+            </label>
+            <label>
+              Guidance law
+              <select name="law">
+                <option value="pn" selected>Proportional navigation (PN)</option>
+                <option value="pp">Pure pursuit (PP)</option>
+              </select>
+            </label>
+
+            <button type="submit" id="sim-go" class="primary">Go</button>
+          </fieldset>
+        </form>
+
+        <p id="sim-status" class="sim-status" aria-live="polite"></p>
+
+        <canvas id="sim-canvas" width="640" height="360" aria-label="Simulation canvas"></canvas>
+        <p class="canvas-legend">
+          <span class="dot seeker"></span> Interceptor
+          <span class="dot target"></span> Target
+        </p>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <p>Local only · <code>127.0.0.1:8080</code> · UI <code>6e-replay-1</code></p>
+    </footer>
+
+    <script src="/app.js?v=6e-replay-1" defer></script>
+  </body>
+</html>

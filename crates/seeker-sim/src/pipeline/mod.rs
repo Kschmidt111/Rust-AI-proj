@@ -2,10 +2,20 @@
 //!
 //! `process_frame_folder` runs YOLO (Phase 3). `track_motion_folder` wires motion
 //! centroids + Kalman tracking (Phase 4F). `intercept_motion_folder` adds PN + sim (Phase 5C).
+//! `run_pure_sim` runs kinematic sim only (Phase 6B).
+
+mod sim_run;
+mod run_api;
+
+pub use run_api::{
+    load_run_status, repo_root, resolve_artifact_path, resolve_input_path, run_folder_pipeline,
+    CreateRunRequest, FolderRunError, RunArtifacts, RunStatusResponse,
+};
+pub use sim_run::{run_pure_sim, SimRunError, SimRunFrame, SimRunRequest, SimRunResponse};
 
 use crate::config::AppConfig;
 use crate::domain::{TrackState, VisionError};
-use crate::guidance::{proportional_navigation, pure_pursuit};
+use crate::guidance::lateral_accel;
 use crate::ingest::{FrameSource, IngestError};
 use crate::sim::{map_image_to_sim, SimEngine};
 use crate::telemetry::{
@@ -541,13 +551,18 @@ fn guidance_accel(config: &AppConfig, track: &TrackState) -> f32 {
     let n = config.guidance.navigation_constant;
     let v_c = config.guidance.closing_velocity;
 
-    if config.guidance.is_pn() {
-        proportional_navigation(n, v_c, track.los_rate)
-    } else if config.guidance.is_pp() {
-        pure_pursuit(n, v_c, track.los)
-    } else {
-        tracing::warn!(law = %config.guidance.law, "unknown guidance law — zero lateral accel");
-        0.0
+    match lateral_accel(
+        &config.guidance.law,
+        n,
+        v_c,
+        track.los,
+        track.los_rate,
+    ) {
+        Ok(a) => a,
+        Err(err) => {
+            tracing::warn!(law = %err.law, "unknown guidance law — zero lateral accel");
+            0.0
+        }
     }
 }
 
@@ -749,7 +764,12 @@ mod tests {
 
         let guidance_text = fs::read_to_string(&summary.guidance_csv).expect("guidance csv");
         assert!(guidance_text.contains("commanded_lateral_accel"));
-        assert!(guidance_text.contains(",pn,"));
+        let law_tag = format!(",{},", config.guidance.law);
+        assert!(
+            guidance_text.contains(&law_tag),
+            "expected law {} in guidance.csv",
+            config.guidance.law
+        );
 
         let sim_text = fs::read_to_string(&summary.sim_csv).expect("sim csv");
         assert!(sim_text.contains("miss_distance"));

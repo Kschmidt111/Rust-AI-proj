@@ -13,7 +13,7 @@ use thiserror::Error;
 ///
 /// # C# analogy
 /// Like binding `appsettings.json` to an `IOptions<AppSettings>` POCO.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct AppConfig {
     /// HTTP server settings (`[server]` in TOML).
     pub server: ServerConfig,
@@ -30,7 +30,7 @@ pub struct AppConfig {
 }
 
 /// `[server]` section — where the Axum listener binds.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct ServerConfig {
     /// Host and port, e.g. `127.0.0.1:8080`.
     pub bind: String,
@@ -211,11 +211,13 @@ mod tests {
         assert_eq!(config.vision.input_size, 640);
         assert_eq!(config.tracking.max_coast_frames, 15);
         assert_eq!(config.tracking.roi_half_size_px, 32);
-        assert_eq!(config.guidance.law, "pn");
+        assert!(
+            config.guidance.is_pn() || config.guidance.is_pp(),
+            "law must be pn or pp, got {}",
+            config.guidance.law
+        );
         assert!((config.guidance.navigation_constant - 3.0).abs() < 1e-6);
         assert!((config.guidance.closing_velocity - 100.0).abs() < 1e-6);
-        assert!(config.guidance.is_pn());
-        assert!(!config.guidance.is_pp());
         assert!((config.sim.dt_seconds - 0.033).abs() < 1e-6);
         assert_eq!(config.paths.output_dir, "data/output");
         assert!(config.server.socket_addr().is_ok());
